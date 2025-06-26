@@ -1,5 +1,19 @@
-# Supplementary Material
+# DINO configuration in VEROS
+This repository provides configuration files and a script to generate the Figure 7 of the manuscript Roquet et al. 2025. *Controls of the Global Overturning Circulation of the Oceans*, submitted to npj Atmosphere and Climate Science.
 
+## Instructions:
+  1. Install the model VEROS [Hafner et al., 2018] following this [instruction](https://veros.readthedocs.io/en/latest/introduction/get-started.html) 
+  2. Copy the configuration files (.py files in this repository, note that other configurations are available in [setups](https://github.com/Titouan-Moulin/NW2_in_Veros/tree/main/setups) )
+  3. Run the model using the command:
+    ```veros run neverworld2_long_channel.py -b jax --float-type float64``` 
+    OR if using MPI:
+    ```srun --mpi=pmi2 --ntasks=8 veros run neverworld2_long_channel.py -b jax --float-type float64 -n 2 4```
+    If you're running on a supercomputer using Slurm, you can use the script [veros_batch_neverworld2.sh](https://github.com/Titouan-Moulin/NW2_in_Veros/edit/main/review_goc/veros_batch_neverworld2.sh) 
+  4. Once the three configurations have been run, use the Jupyter notebook [tutorial_overturning_plot.ipynb](https://github.com/Titouan-Moulin/NW2_in_Veros/edit/main/review_goc/tutorial_overturning_plot.ipynb) to generate the figure. 
+
+  
+ <br><br> 
+  
 ![Setup](https://github.com/user-attachments/assets/bfe4db90-a57a-48ec-81d3-8a43fccf9d7e)
 
 
