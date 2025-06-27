@@ -75,21 +75,58 @@ The domain (see Figure above) is **50° wide** and is bounded by land at **70°N
   - At latitudes: `-70, -45, -15, 0, 15, 45, 70°`
 - Each interpolation node has **zero derivative**, ensuring wind stress and its curl vanish at the boundaries.
 
-### Vertical Diffusivity
 
-- Follows a profile from [Bryan, 1979]:
-  - Surface: $\kappa_{min} = 0.305 \times 10^{-4} \text{ m}^2/\text{s}$
-  - Bottom: $\kappa_{max} = 1.26 \times 10^{-4} \text{ m}^2/\text{s}$
 
-This configuration constitutes the **Reference case** (neverworld2_clim_bis.py)
-Two alternative configurations were tested:
-1. **Constant diffusivity**: $\kappa = \kappa_{max}$ (neverworld2_clim_mix_max.py)
-2. **Blocked re-entrant channel** (neverworld2_noso.py)
+## Runs Description
 
-## Runs
+This section describes the behavior of three different model configurations and the physical interpretation of their dynamics. Each configuration uses a 1° resolution setup and is run for **1000 model years**.
+1. **Reference case** (neverworld2_clim_bis.py)
+2. **Constant diffusivity**: $\kappa = \kappa_{max}$ (neverworld2_clim_mix_max.py)
+3. **Blocked re-entrant channel** (neverworld2_noso.py)
+ <br><br> 
 
-This three experiments are run on a coarse resolution grid **1°x1°** for **1000 model years**. 
+ ![Clim_MixMax_NoSO_gsw_hor_github](https://github.com/user-attachments/assets/d34370e0-dc4f-4631-a51b-74b9e6565b2e)
+ 
+### (a) Reference case (neverworld2_clim_bis.py)
+- A **zonal wind stress** is applied at the surface.
+- **Thermal and haline restoring** is applied to zonally averaged climatological values.
+- **Eddies** are parameterized using a **GM-like scheme**.
+- A **vertical diffusivity profile** is prescribed [Bryan, 1979]:
+  - Above 2000 m: $\kappa_{min} = 0.305 \times 10^{-4} \text{ m}^2/\text{s}$
+  - Transitioning to: $\kappa_{max} = 1.26 \times 10^{-4} \text{ m}^2/\text{s}$ below 3000m
 
+This configuration produces a typical overturning structure with:
+- **Tropical cells** in the upper thermocline
+- A **deep AMOC-like cell**
+- A **bottom AABW-like cell** originating from the southern edge
+
+### (b) Constant Diffusivity Configuration
+
+In this case, the model uses a **constant vertical diffusivity of 1.25 cm²/s** extending all the way to the surface.
+
+- The **AMOC-like cell** becomes **deeper**, **more intense**, and **more diabatic**.
+- The **tropical cells** also become **deeper** and **stronger** due to enhanced vertical mixing.
+
+### (c) Blocked Southern Channel
+
+When the **southern re-entrant channel is blocked**:
+- The **AMOC-like cell** is **nearly shut down**.
+- The **bottom cell** becomes **stronger** due to wind pumping, Southern convection and deep mixing.
+- The **tropical cells** remain mostly **unchanged**, showing that they are primarily **wind-driven**.
+- The **pycnocline depth** becomes about **30% shallower** compared to the open-channel case.
+
+---
+
+Numerical ocean models like this help illustrate how **vertical mixing impacts the global overturning circulation (GOC)** and ocean stratification. They also provide a useful framework for testing **theoretical scaling arguments**.
+
+For example, comparing cases (a) and (b) highlights the general principle that **stronger mixing leads to stronger circulation**. The increased diffusivity in (b) strengthens the AMOC, increases its diabatic nature, and deepens the ocean stratification. In contrast, a [setup](https://github.com/Titouan-Moulin/NW2_in_Veros/blob/main/setups/neverworld2_clim_mix_min.py)  with **low diapycnal diffusivity** results in a **weak bottom cell** and slow abyssal circulation.
+
+Simulations with realistic basins, prescribed turbulent diffusivity, but [**no winds**](https://github.com/Titouan-Moulin/NW2_in_Veros/blob/main/setups/neverworld2_clim_now.py), still show the presence of a **deep thermocline**.
+
+This is consistent when comparing configurations with an **open vs. closed Southern channel**:
+- With the **open channel**, stratification is deeper and the AMOC is stronger.
+- With the **closed channel**, the **bottom cell** becomes stronger and extends higher into the water column.
+This suggests a **competition** between the two overturning cells.
 
 ---
 ## References
