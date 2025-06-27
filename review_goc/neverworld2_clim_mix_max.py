@@ -61,6 +61,11 @@ class ACCSectorSetup(VerosSetup):
     """
 
     max_depth = 4000.0 
+    lat_min = -70.
+    lat_max = 70.
+    lon_min = 0.
+    lon_max = 50.
+    res = 1.0
 
     @veros_routine
     def set_parameter(self, state):
@@ -69,13 +74,6 @@ class ACCSectorSetup(VerosSetup):
 
         settings.identifier = "neverworld2"
         settings.description = "Neverworld 2 model"
-
-        #added for dino
-        settings.lat_min = -70.
-        settings.lat_max = 70.
-        settings.lon_min = 0.
-        settings.lon_max = 50.
-        settings.res = 1.0
 
         settings.nx = 52
         settings.ny = 140
@@ -150,8 +148,8 @@ class ACCSectorSetup(VerosSetup):
     def set_grid(self, state):
         vs = state.variables
         settings = state.settings
-        vs.dxt = update(vs.dxt, at[...], settings.res * 52 / settings.nx)
-        vs.dyt = update(vs.dyt, at[...], settings.res * 140 / settings.ny)
+        vs.dxt = update(vs.dxt, at[...], self.res * 52 / settings.nx)
+        vs.dyt = update(vs.dyt, at[...], self.res * 140 / settings.ny)
 
         vs.dzt = veros.tools.get_vinokur_grid_steps(settings.nz, self.max_depth, 10.0, refine_towards="lower")
 
@@ -297,6 +295,8 @@ class ACCSectorSetup(VerosSetup):
             "rho",
             "forc_salt_surface",
             "forc_temp_surface",
+            "t_star",
+            "s_star",
         )
 
         state.diagnostics["averages"].output_frequency = 86400.0 * 365 / 12
@@ -410,16 +410,16 @@ class ACCSectorSetup(VerosSetup):
         slope = 3.                 # slope
         H_max = 4000.              # Maximum depth of the bathymetry on W-point
         #H_min = 2000.              # Minimum depth of the bathymetry on W-point (approx.)
-        width           = abs(state.settings.lon_max - state.settings.lon_min)
+        width           = abs(self.lon_max - self.lon_min)
         channel_width   = abs(lat_channel_max - lat_channel_min)
 
         zy_cha = self.exp_bathymetry(lat_mesh_t, lat_channel_min, lat_channel_max, width, slope, channel_width / 2, self)
 
-        zx_raw = self.exp_bathymetry(lon_mesh_t, state.settings.lon_min, state.settings.lon_max, width, slope, channel_width / 2, self) # /!\ I chose long_max-1 for a better symmetry, not anymore because not the same grid 
+        zx_raw = self.exp_bathymetry(lon_mesh_t, self.lon_min, self.lon_max, width, slope, channel_width / 2, self) # /!\ I chose long_max-1 for a better symmetry, not anymore because not the same grid 
         zx = zx_raw * (1.0 - zy_cha) + zy_cha
 
-        slope_lat = npx.cos( state.settings.pi * state.settings.lat_max /180) * slope
-        zy = self.exp_bathymetry(lat_mesh_t, state.settings.lat_min, state.settings.lat_max, width, slope_lat, channel_width / 2, self)
+        slope_lat = npx.cos( state.settings.pi * self.lat_max /180) * slope
+        zy = self.exp_bathymetry(lat_mesh_t, self.lat_min, self.lat_max, width, slope_lat, channel_width / 2, self)
 
         pbathy = zx * zy * (H_max - H_min) + H_min
 
