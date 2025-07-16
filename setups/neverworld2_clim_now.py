@@ -46,12 +46,11 @@ class ACCSectorSetup(VerosSetup):
 
     This setup demonstrates:
      - setting up an idealized geometry after `(Munday et al., 2013) <https://doi.org/10.1175/JPO-D-12-095.1>`_.
-     - modifing surface forcings over selected regions of the domain
      - sensitivity of circumpolar transport and meridional overturning
        to changes in Southern Ocean wind stress and buoyancy anomalies
      - basic usage of diagnostics
 
-    :class:`Adapted from ACC channel model <veros.setups.acc.ACCSetup>`.
+    :class:`Adapted from ACC channel model <veros.setups.acc.ACCSetup>` anf from Roman Nuterman code.
 
     Reference:
 
@@ -62,6 +61,11 @@ class ACCSectorSetup(VerosSetup):
     """
 
     max_depth = 4000.0 
+    lat_min = -70.
+    lat_max = 70.
+    lon_min = 0.
+    lon_max = 50.
+    res = 1.0
 
     @veros_routine
     def set_parameter(self, state):
@@ -70,13 +74,6 @@ class ACCSectorSetup(VerosSetup):
 
         settings.identifier = "neverworld2"
         settings.description = "Neverworld 2 model"
-
-        #added for dino
-        settings.lat_min = -70.
-        settings.lat_max = 70.
-        settings.lon_min = 0.
-        settings.lon_max = 50.
-        settings.res = 1.0
 
         settings.nx = 52
         settings.ny = 140
@@ -143,6 +140,8 @@ class ACCSectorSetup(VerosSetup):
         var_meta = state.var_meta
         var_meta.update(t_rest=Variable("t_rest", ("xt", "yt"), "1/s", "Surface temperature restoring time scale"),
                         s_rest=Variable("s_rest", ("xt", "yt"), "1/s", "Surface salinity restoring time scale"),
+                        t_star=Variable("t_star", ("yt",), "deg C", "Reference surface temperature"),
+                        s_star=Variable("s_star", ("yt",), "psu", "Reference surface salinity"),
                         )
 
         #     t_star=Variable("t_star", ("yt",), "deg C", "Reference surface temperature"),
@@ -151,8 +150,8 @@ class ACCSectorSetup(VerosSetup):
     def set_grid(self, state):
         vs = state.variables
         settings = state.settings
-        vs.dxt = update(vs.dxt, at[...], settings.res * 52 / settings.nx)
-        vs.dyt = update(vs.dyt, at[...], settings.res * 140 / settings.ny)
+        vs.dxt = update(vs.dxt, at[...], self.res * 52 / settings.nx)
+        vs.dyt = update(vs.dyt, at[...], self.res * 140 / settings.ny)
 
         vs.dzt = veros.tools.get_vinokur_grid_steps(settings.nz, self.max_depth, 10.0, refine_towards="lower")
 
@@ -204,12 +203,11 @@ class ACCSectorSetup(VerosSetup):
         hermite_interp = CubicHermiteSpline(latitudes, taux_values, derivatives)
 
         taux_interp = hermite_interp(vs.yt)
-
         vs.surface_taux = 0.0 * taux_interp * vs.maskU[:, :, -1]
 
 
+        ## Values extracted from IAPv4 (Cheng et al 2020, 2024) dataset averaged over year 2010 and 2019
 
-        ## Values extracted from IAP dataset averaged over year 2010 and 2019
         zonal_mean_sss = npx.array([34.67001704, 34.63708804, 34.59284335, 34.6202206 , 34.54753945, 34.56479844, 34.61101384, 34.61359597, 34.61194096, 34.59274873,
             34.57398229, 34.55517996, 34.52272882, 34.49713288, 34.45689823, 34.41201328, 34.36218568, 34.31692821, 34.28994908, 34.26151749,
             34.25168241, 34.2158881 , 34.16372239, 34.12272119, 34.09171997, 34.09845157, 34.1712854 , 34.24426871, 34.29039499, 34.37081634,
@@ -253,7 +251,7 @@ class ACCSectorSetup(VerosSetup):
              69.5,  70.5,  71.5,  72.5,  73.5,  74.5])
         
         # Fit a smooth spline
-        tck_salinity = splrep(lat, zonal_mean_sss, s=3.) #change from 1.75 to 3 after 70y
+        tck_salinity = splrep(lat, zonal_mean_sss, s=3.)
         tck_temperature = splrep(lat, zonal_mean_sst, s=1.75)
 
         vs.t_star = splev(vs.yt, tck_temperature)
@@ -299,14 +297,16 @@ class ACCSectorSetup(VerosSetup):
             "rho",
             "forc_salt_surface",
             "forc_temp_surface",
+            "t_star",
+            "s_star",
         )
 
         state.diagnostics["averages"].output_frequency = 86400.0 * 365 / 12
         state.diagnostics["averages"].sampling_frequency = settings.dt_tracer * 10
-        state.diagnostics["overturning"].output_frequency = 365 * 86400.0 / 12
+        state.diagnostics["overturning"].output_frequency = 86400.0 * 365 / 12
         state.diagnostics["overturning"].sampling_frequency = settings.dt_tracer * 10
-        state.diagnostics["tracer_monitor"].output_frequency = 365 * 86400.0 / 12.0
-        state.diagnostics["energy"].output_frequency = 365 * 86400.0 / 48
+        state.diagnostics["tracer_monitor"].output_frequency = 86400.0 * 365 / 12
+        state.diagnostics["energy"].output_frequency = 86400.0 * 365 / 12
         state.diagnostics["energy"].sampling_frequency = settings.dt_tracer * 10
 
     @veros_routine
@@ -412,16 +412,16 @@ class ACCSectorSetup(VerosSetup):
         slope = 3.                 # slope
         H_max = 4000.              # Maximum depth of the bathymetry on W-point
         #H_min = 2000.              # Minimum depth of the bathymetry on W-point (approx.)
-        width           = abs(state.settings.lon_max - state.settings.lon_min)
+        width           = abs(self.lon_max - self.lon_min)
         channel_width   = abs(lat_channel_max - lat_channel_min)
 
         zy_cha = self.exp_bathymetry(lat_mesh_t, lat_channel_min, lat_channel_max, width, slope, channel_width / 2, self)
 
-        zx_raw = self.exp_bathymetry(lon_mesh_t, state.settings.lon_min, state.settings.lon_max, width, slope, channel_width / 2, self) # /!\ I chose long_max-1 for a better symmetry, not anymore because not the same grid 
+        zx_raw = self.exp_bathymetry(lon_mesh_t, self.lon_min, self.lon_max, width, slope, channel_width / 2, self) # /!\ I chose long_max-1 for a better symmetry, not anymore because not the same grid 
         zx = zx_raw * (1.0 - zy_cha) + zy_cha
 
-        slope_lat = npx.cos( state.settings.pi * state.settings.lat_max /180) * slope
-        zy = self.exp_bathymetry(lat_mesh_t, state.settings.lat_min, state.settings.lat_max, width, slope_lat, channel_width / 2, self)
+        slope_lat = npx.cos( state.settings.pi * self.lat_max /180) * slope
+        zy = self.exp_bathymetry(lat_mesh_t, self.lat_min, self.lat_max, width, slope_lat, channel_width / 2, self)
 
         pbathy = zx * zy * (H_max - H_min) + H_min
 

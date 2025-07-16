@@ -66,6 +66,8 @@ class ACCSectorSetup(VerosSetup):
     lon_min = 0.
     lon_max = 50.
     res = 1.0
+    lon_max_basin = 54.
+    lat_channel_right = -30.
 
     @veros_routine
     def set_parameter(self, state):
@@ -75,7 +77,7 @@ class ACCSectorSetup(VerosSetup):
         settings.identifier = "neverworld2"
         settings.description = "Neverworld 2 model"
 
-        settings.nx = 52
+        settings.nx = 104
         settings.ny = 140
         
         settings.nz = 36
@@ -150,8 +152,8 @@ class ACCSectorSetup(VerosSetup):
     def set_grid(self, state):
         vs = state.variables
         settings = state.settings
-        vs.dxt = update(vs.dxt, at[...], self.res * 52 / settings.nx)
-        vs.dyt = update(vs.dyt, at[...], self.res * 140 / settings.ny)
+        vs.dxt = update(vs.dxt, at[...], self.res)
+        vs.dyt = update(vs.dyt, at[...], self.res)
 
         vs.dzt = veros.tools.get_vinokur_grid_steps(settings.nz, self.max_depth, 10.0, refine_towards="lower")
 
@@ -163,21 +165,17 @@ class ACCSectorSetup(VerosSetup):
             vs.coriolis_t, at[:, :], 2 * settings.omega * npx.sin(vs.yt[None, :] / 180.0 * settings.pi)
         )
 
-    @veros_routine
+    @veros_routine(dist_safe=False, local_variables=["kbot", "zt", "bathymetry", "xt", "yt"])
     def set_topography(self, state):
         vs = state.variables
         settings = state.settings
 
         lat_mesh_t, lon_mesh_t = npx.meshgrid(vs.yt, vs.xt)
-        
+        lat_mesh_t_bas, lon_mesh_t_bas = npx.meshgrid(vs.yt, vs.xt[:int(self.lon_max_basin)])
+        print('lon_mesh_t = ', lat_mesh_t.shape, 'and lat_mesh_t_bas = ', lat_mesh_t_bas.shape)
         vs.bathymetry = npx.full(lon_mesh_t.shape, 0)
-        vs.bathymetry = update(vs.bathymetry, at[...], self.get_bathymetry(self, state, lon_mesh_t, lat_mesh_t, H_min=0.))
+        vs.bathymetry = update(vs.bathymetry, at[...], self.get_bathymetry(self, state, lon_mesh_t_bas, lat_mesh_t, lon_mesh_t, H_min=0.))
         vs.bathymetry = update(vs.bathymetry, at[...], self.add_gauss_ring(self, state, lon_mesh_t, lat_mesh_t))
-
-        ## Roman's version :
-        # with h5netcdf.File("/home/x_titmo/work/setup/NeverWorld2/neverworld2_bathy.nc", "r") as topography_file:
-        #     topo_x, topo_y, topo_z = (npx.array(topography_file.variables[k], dtype="float").T for k in ("x", "y", "bathy"))
-
         topo_z = -vs.bathymetry
         topo_z = npx.minimum(topo_z, 0.0)
 
@@ -403,7 +401,7 @@ class ACCSectorSetup(VerosSetup):
         return exp
     
     @staticmethod
-    def get_bathymetry(self,state, lon_mesh_t, lat_mesh_t, H_min):
+    def get_bathymetry(self,state, lon_mesh_t, lat_mesh_t, lon_mesh_t_glob, H_min):
         '''
         Compute bathymetry as 2D numpy array.
         '''
@@ -415,10 +413,24 @@ class ACCSectorSetup(VerosSetup):
         width           = abs(self.lon_max - self.lon_min)
         channel_width   = abs(lat_channel_max - lat_channel_min)
 
+        width_basin = abs(self.lon_max_basin - self.lon_min)
+        print('width bassin =', width_basin)
+
+        zy_large_cha = self.exp_bathymetry(lat_mesh_t, lat_channel_min, self.lat_channel_right, width, slope, channel_width / 2, self)
+
         zy_cha = self.exp_bathymetry(lat_mesh_t, lat_channel_min, lat_channel_max, width, slope, channel_width / 2, self)
 
-        zx_raw = self.exp_bathymetry(lon_mesh_t, self.lon_min, self.lon_max, width, slope, channel_width / 2, self) # /!\ I chose long_max-1 for a better symmetry, not anymore because not the same grid 
-        zx = zx_raw * (1.0 - zy_cha) + zy_cha
+        zx_raw = self.exp_bathymetry(lon_mesh_t, self.lon_min, self.lon_max_basin-4, width_basin, slope, channel_width / 2, self) # /!\ I chose long_max-1 for a better symmetry, not anymore because not the same grid 
+        print('zx_raw ini =', zx_raw.shape)
+        zx_raw = npx.concatenate((zx_raw, npx.zeros((state.settings.nx +4 - int(self.lon_max_basin), state.settings.ny+4))), axis=0)
+        print('zx_raw after concatenate =', zx_raw.shape)
+        zx_raw = update(zx_raw, at[(lon_mesh_t_glob <= 10)], 1.)
+
+        zx_tot = self.exp_bathymetry(lon_mesh_t_glob, self.lon_min, self.lon_max+2, width_basin, slope, channel_width / 2, self)
+        
+        zx_raw_close = (zx_raw * (1.0 - zy_large_cha) + zy_large_cha) * zx_tot
+
+        zx = zx_raw_close * (1.0 - zy_cha) + zy_cha
 
         slope_lat = npx.cos( state.settings.pi * self.lat_max /180) * slope
         zy = self.exp_bathymetry(lat_mesh_t, self.lat_min, self.lat_max, width, slope_lat, channel_width / 2, self)
@@ -439,8 +451,8 @@ class ACCSectorSetup(VerosSetup):
         lat_channel_min = -65.     # Minimum channel latitude on T-point (approx.)     
         lat_channel_max = -45.     # Maximum channel latitude on T-point (approx.)
         #drake_si   
-        slope_ds = 2.              # Length scale of the slope of the sill [degrees]
-        depth_ds = -4000.           # Depth of the sill [meters]
+        slope_ds = 4.              # Length scale of the slope of the sill [degrees]
+        depth_ds = 2500.           # Depth of the sill [meters]
 
 
         lat_0       = (lat_channel_max + lat_channel_min) / 2

@@ -46,12 +46,11 @@ class ACCSectorSetup(VerosSetup):
 
     This setup demonstrates:
      - setting up an idealized geometry after `(Munday et al., 2013) <https://doi.org/10.1175/JPO-D-12-095.1>`_.
-     - modifing surface forcings over selected regions of the domain
      - sensitivity of circumpolar transport and meridional overturning
        to changes in Southern Ocean wind stress and buoyancy anomalies
      - basic usage of diagnostics
 
-    :class:`Adapted from ACC channel model <veros.setups.acc.ACCSetup>`.
+    :class:`Adapted from ACC channel model <veros.setups.acc.ACCSetup>` anf from Roman Nuterman code.
 
     Reference:
 
@@ -62,6 +61,11 @@ class ACCSectorSetup(VerosSetup):
     """
 
     max_depth = 4000.0 
+    lat_min = -70.
+    lat_max = 70.
+    lon_min = 0.
+    lon_max = 50.
+    res = 1.0
     lon_max_basin = 54.
     @veros_routine
     def set_parameter(self, state):
@@ -71,13 +75,6 @@ class ACCSectorSetup(VerosSetup):
         settings.identifier = "neverworld2"
         settings.description = "Neverworld 2 model"
 
-        #added for dino
-        settings.lat_min = -70.
-        settings.lat_max = 70.
-        settings.lon_min = 0.
-        settings.lon_max = 148.
-        settings.res = 1.0
-
         settings.nx = 152
         settings.ny = 140
         
@@ -85,7 +82,7 @@ class ACCSectorSetup(VerosSetup):
         
         settings.dt_mom = 3600.0
         settings.dt_tracer = 3600.0
-        settings.runlen = 86400 * 3
+        settings.runlen = 86400 * 2
 
         settings.x_origin = 0.0
         settings.y_origin = -70.0
@@ -143,6 +140,8 @@ class ACCSectorSetup(VerosSetup):
         var_meta = state.var_meta
         var_meta.update(t_rest=Variable("t_rest", ("xt", "yt"), "1/s", "Surface temperature restoring time scale"),
                         s_rest=Variable("s_rest", ("xt", "yt"), "1/s", "Surface salinity restoring time scale"),
+                        t_star=Variable("t_star", ("yt",), "deg C", "Reference surface temperature"),
+                        s_star=Variable("s_star", ("yt",), "psu", "Reference surface salinity"),
                         )
 
         #     t_star=Variable("t_star", ("yt",), "deg C", "Reference surface temperature"),
@@ -151,8 +150,8 @@ class ACCSectorSetup(VerosSetup):
     def set_grid(self, state):
         vs = state.variables
         settings = state.settings
-        vs.dxt = update(vs.dxt, at[...], settings.res)
-        vs.dyt = update(vs.dyt, at[...], settings.res)
+        vs.dxt = update(vs.dxt, at[...], self.res)
+        vs.dyt = update(vs.dyt, at[...], self.res)
 
         vs.dzt = veros.tools.get_vinokur_grid_steps(settings.nz, self.max_depth, 10.0, refine_towards="lower")
 
@@ -176,12 +175,6 @@ class ACCSectorSetup(VerosSetup):
         vs.bathymetry = update(vs.bathymetry, at[...], self.get_bathymetry(self, state, lon_mesh_t_bas, lat_mesh_t, H_min=0.))
         vs.bathymetry = update(vs.bathymetry, at[...], self.add_gauss_ring(self, state, lon_mesh_t, lat_mesh_t))
         topo_z = -vs.bathymetry
-
-        ## Open restart_file :
-        # with h5netcdf.File("/home/x_titmo/work/runs_output/NW2_clim/Long_Channel/3d_restart_for_bathy.h5", "r") as topography_file:
-        #     topo_z = npx.array(topography_file['/core']['bathymetry'])
-        # #vs.bathymetry = update(vs.bathymetry , at[...], topo_z)
-        
         topo_z = npx.minimum(topo_z, 0.0)
 
         depth_levels = 1 + npx.argmin(npx.abs(topo_z[:, :, npx.newaxis] - vs.zt[npx.newaxis, npx.newaxis, :]), axis=2)
@@ -209,7 +202,7 @@ class ACCSectorSetup(VerosSetup):
         vs.surface_taux = taux_interp * vs.maskU[:, :, -1]
 
 
-        ## Values extracted from iap dataset averaged over year 2010 and 2019
+        ## Values extracted from IAPv4 (Cheng et al 2020, 2024) dataset averaged over year 2010 and 2019
 
         zonal_mean_sss = npx.array([34.67001704, 34.63708804, 34.59284335, 34.6202206 , 34.54753945, 34.56479844, 34.61101384, 34.61359597, 34.61194096, 34.59274873,
             34.57398229, 34.55517996, 34.52272882, 34.49713288, 34.45689823, 34.41201328, 34.36218568, 34.31692821, 34.28994908, 34.26151749,
@@ -254,7 +247,7 @@ class ACCSectorSetup(VerosSetup):
              69.5,  70.5,  71.5,  72.5,  73.5,  74.5])
         
         # Fit a smooth spline
-        tck_salinity = splrep(lat, zonal_mean_sss, s=3.) #change from 1.75 to 3 after 70y
+        tck_salinity = splrep(lat, zonal_mean_sss, s=3.)
         tck_temperature = splrep(lat, zonal_mean_sst, s=1.75)
 
         vs.t_star = splev(vs.yt, tck_temperature)
@@ -289,7 +282,7 @@ class ACCSectorSetup(VerosSetup):
 
         settings = state.settings
         #state.diagnostics["snapshot"].output_variables += ["t_star",]
-        state.diagnostics["snapshot"].output_frequency = 86400.0 * 365   # Every year
+        state.diagnostics["snapshot"].output_frequency = 86400.0 * 365  # Every year
         state.diagnostics["averages"].output_variables = (
             "salt",
             "temp",
@@ -300,11 +293,13 @@ class ACCSectorSetup(VerosSetup):
             "rho",
             "forc_salt_surface",
             "forc_temp_surface",
+            "t_star",
+            "s_star",
         )
 
         state.diagnostics["averages"].output_frequency = 86400.0 * 365 / 12
         state.diagnostics["averages"].sampling_frequency = settings.dt_tracer * 10
-        state.diagnostics["overturning"].output_frequency =  86400.0 * 365 / 12
+        state.diagnostics["overturning"].output_frequency = 86400.0 * 365 / 12
         state.diagnostics["overturning"].sampling_frequency = settings.dt_tracer * 10
         state.diagnostics["tracer_monitor"].output_frequency = 86400.0 * 365 / 12
         state.diagnostics["energy"].output_frequency = 86400.0 * 365 / 12
@@ -413,22 +408,21 @@ class ACCSectorSetup(VerosSetup):
         slope = 3.                 # slope
         H_max = 4000.              # Maximum depth of the bathymetry on W-point
         #H_min = 2000.              # Minimum depth of the bathymetry on W-point (approx.)
-        width           = abs(state.settings.lon_max - state.settings.lon_min)
+        width           = abs(self.lon_max - self.lon_min)
         channel_width   = abs(lat_channel_max - lat_channel_min)
 
-        width_basin = abs(self.lon_max_basin - state.settings.lon_min)
+        width_basin = abs(self.lon_max_basin - self.lon_min)
         print('width bassin =', width_basin)
         zy_cha = self.exp_bathymetry(lat_mesh_t, lat_channel_min, lat_channel_max, width, slope, channel_width / 2, self)
 
-        zx_raw = self.exp_bathymetry(lon_mesh_t, state.settings.lon_min, self.lon_max_basin-4, width_basin, slope, channel_width / 2, self) # /!\ I chose long_max-1 for a better symmetry, not anymore because not the same grid 
+        zx_raw = self.exp_bathymetry(lon_mesh_t, self.lon_min, self.lon_max_basin-4, width_basin, slope, channel_width / 2, self) # /!\ I chose long_max-1 for a better symmetry, not anymore because not the same grid 
         print('zx_raw ini =', zx_raw.shape)
         zx_raw = npx.concatenate((zx_raw, npx.zeros((state.settings.nx +4 - int(self.lon_max_basin), state.settings.ny+4))), axis=0)
         print('zx_raw after concatenate =', zx_raw.shape)
-
         zx = zx_raw * (1.0 - zy_cha) + zy_cha
 
-        slope_lat = npx.cos( state.settings.pi * state.settings.lat_max /180) * slope
-        zy = self.exp_bathymetry(lat_mesh_t, state.settings.lat_min, state.settings.lat_max, width, slope_lat, channel_width / 2, self)
+        slope_lat = npx.cos( state.settings.pi * self.lat_max /180) * slope
+        zy = self.exp_bathymetry(lat_mesh_t, self.lat_min, self.lat_max, width, slope_lat, channel_width / 2, self)
 
         pbathy = zx * zy * (H_max - H_min) + H_min
 
